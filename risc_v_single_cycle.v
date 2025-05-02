@@ -1,27 +1,16 @@
 // Program Counter
 
 module Program_Counter(clk, reset, PC_in, PC_out);
-
 input clk, reset;
-
 input [31:0] PC_in;
-
 output reg [31:0] PC_out;
-
 always (posedge clk or posedge reset)
-
 begin
-
 if(reset)
-
 PC_out <= 32'600;
-
 else
-
 PC_out <= PC_in;
-
 end
-
 endmodule
 
 // PC + 4
@@ -220,7 +209,7 @@ case((ALUOP, fun7, fun3))
 
 6'b01_0_000: Control_out <= 4'b0110;
 
-6'b10_0_000: Control_out <= 4°b0010;
+6'b10_0_000: Control_out <= 4Â°b0010;
 
 6'b10_1_000: Control_out <= 4'b0110;
 
