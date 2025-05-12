@@ -1,333 +1,194 @@
 // Program Counter
-
-module Program_Counter(clk, reset, PC_in, PC_out);
-input clk, reset;
-input [31:0] PC_in;
-output reg [31:0] PC_out;
-always (posedge clk or posedge reset)
-begin
-if(reset)
-PC_out <= 32'600;
-else
-PC_out <= PC_in;
-end
-endmodule
-
-// PC + 4
-
-module PCplus4 (fromPC, NextoPC);
-
-input [31:0] fromPC;
-
-output [31:0] NextoPC;
-
-assign NextoPC = 4+ fromPC;
-
+module ProgramCounter(clk, rst,
+nextAddr, currAddr);
+ input clk, rst;
+ input [31:0] nextAddr;
+ output reg [31:0] currAddr;
+ always @(posedge clk or posedge rst)
+ begin
+ if (rst)
+ currAddr <= 32'd0;
+ else
+ currAddr <= nextAddr;
+ end
 endmodule
 
 // Instruction Memory
-
-module Intruction_Mem(clk, reset, read_address, instruction_out);
-
-input clk, reset;
-
-input [31:0] read_address;
-
-output reg [31:0] instruction_out;
-
-integer k;
-
-reg [31:0] I_Mem[63:0];
-
-always (posedge clk or posedge reset)
-
-begin
-
-if(reset)
-
-begin
-
-for(k= 0; k<64; k=k+1) begin
-
-I_Mem[k] <= 32'600;
-
-end
-
-end
-
-else
-
-instruction_out <= I_Mem[read_address];
-
-end
-
+module instruction_memory(pc,
+instruction);
+ input [31:0] pc;
+ output [31:0] instruction;
+ reg [31:0] imem [63:0];
+ integer i;
+ initial begin
+ for (i = 0; i < 64; i = i + 1)
+ imem[i] = 32'h00000013;
+ imem[0] = 32'h00500113;
+ imem[1] = 32'h00300193;
+ imem[2] = 32'h002081b3;
+ imem[3] = 32'h00312233;
+ imem[4] = 32'hfe310ae3;
+ end
+ assign instruction = imem[pc[31:2]];
 endmodule
 
-module Reg_File(clk, reset, RegWrite, Rs1, Rs2, Rd, Write_data, read_datal, read_data2);
-
-input clk, reset, RegWrite;
-
-input [4:0] Rs1, Rs2, Rd;
-
-input [31:0] Write_data;
-
-output [31:0] read_datal, read_data2;
-
-integer k;
-
-reg [31:0] Registers [31:0];
-
-always (posedge clk or posedge reset)
-
+//Register File
+module RegFile (clk,reset,
+reg_write,read_reg1,read_reg2,
+write_reg,write_data,read_data1,read_data2
+);
+ input clk, reset, reg_write;
+ input [4:0] read_reg1, read_reg2,
+write_reg;
+ input [31:0] write_data;
+ output [31:0] read_data1, read_data2;
+reg [31:0] registers [31:0];
+ integer k;
+ always @(posedge clk or posedge reset)
 begin
-
-if (reset)
-
-begin
-
-for(k=0; k<32; k=k+1)begin Registers[k] <= 32'b00; end
-
-end
-
-else if(RegWrite)begin
-
-Registers [Rd] <= Write_data;
-
-end
-
-end
-
-assign read_datal Registers[Rs1];
-
-assign read_data2 Registers [Rs2];
-
+ if (reset) begin
+ for (k = 0; k < 32; k = k + 1)
+ registers[k] <= 32'b0;
+ end
+ else if (reg_write) begin
+ registers[write_reg] <= write_data;
+ end
+ end
+ assign read_data1 = registers[read_reg1];
+ assign read_data2 = registers[read_reg2];
 endmodule
 
 // Immediate Generator
-
-module ImmGen (Opcode, instruction, ImmExt);
-
-input [6:0] Opcode;
-
-input [31:0] instruction;
-
-output [31:0] ImmExt;
-
-always @(*)
-
-begin
-
-case (Opcode)
-
-7'b0000011: ImmExt = {{20{instruction [31]}}, instruction[31:20]};
-7'b0100011: ImmExt= {{20(instruction [31]}}, instruction [31:25], instruction [11:7]}; 
-7'b1100011: ImmExt = {{19(instruction[31]}}, instruction [31], instruction [30:25], instruction[11:8],1'b0};
-
-endcase
-
-end
-
-endmodule
+module ImmGen (Opcode, Instr, Imm_Out); 
+input [6:0] Opcode; 
+input [31:0] Instr; 
+output reg [31:0] Imm_Out; 
+always @(*) 
+begin 
+case (Opcode) 
+7'b0000011: Imm_Out <= {{20{Instr [31]}}, Instr[31:20]}; //I-type 
+7'b0100011: Imm_Out <= {{20{Instr [31]}}, Instr [31:25], Instr [11:7]}; //S-type 
+7'b1100011: Imm_Out <= {{19{Instr[31]}}, Instr [7], Instr [30:25], Instr[11:8],1'b0}; //SB-type 
+endcase 
+end 
+endmodule 
 
 // Control Unit
-
-module Control_Unit(instruction, Branch, MemRead, MemtoReg, ALUOp, MemWrite, ALUSrc, RegWrite);
-
-input [6:0] instruction;
-
-output Branch, MemRead, MemtoReg, Memwrite, ALUSrc, RegWrite;
-
-output [1:0] ALUOP;
-
-always (*)
-
+module Control_Unit(opcode, Branch, MemRead, MemtoReg, ALUOp, MemWrite,
+ALUSrc, RegWrite);
+input [6:0] opcode;
+output reg Branch, MemRead, MemtoReg;
+output reg [1:0] ALUOp;
+output reg MemWrite, ALUSrc, RegWrite;
+always @ (*)
 begin
-
-case(instruction)
-
-7'60110011: {ALUSrc, MemtoReg, RegWrite, MemRead, MemWrite, Branch, ALUOP} <= 8'b001000_01;
-
-7'b0000011: {ALUSrc, MemtoReg, RegWrite, MemRead, MemWrite, Branch, ALUOP} <= 8'b111100_00;
-
-7'60100011: {ALUSrc, MemtoReg, RegWrite, MemRead, MemWrite, Branch, ALUOP} <= 8'6100010_00;
-
-7'b1100011: {ALUSrc, MemtoReg, RegWrite, MemRead, MemWrite, Branch, ALUOp} <= 8'b000001_01;
-
+case (opcode)
+ 7'b0000011: begin Branch = 1'b0; MemRead = 1'b1; MemtoReg = 1'b1; ALUOp =
+2'b00; MemWrite = 1'b0; ALUSrc = 1'b1; RegWrite = 1'b1; end
+ 7'b0100011: begin Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'bx; ALUOp =
+2'b00; MemWrite = 1'b1; ALUSrc = 1'b1; RegWrite = 1'b0; end
+ 7'b1100011: begin Branch = 1'b1; MemRead = 1'b0; MemtoReg = 1'bx; ALUOp =
+2'b01; MemWrite = 1'b0; ALUSrc = 1'b0; RegWrite = 1'b0; end
+ 7'b0110011: begin Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'b0; ALUOp =
+2'b10; MemWrite = 1'b0; ALUSrc = 1'b0; RegWrite = 1'b1; end
 endcase
 end
 endmodule
 
 // ALU
-
 module ALU_unit (A, B, Control_in, ALU_Result, zero);
-
-input [31:0] A, B;
-
-input [3:0] Control_in;
-
-output reg zero;
-
-output reg [31:0] ALU_Result;
-
-always (Control_in, or A or B)
-
-begin
-
-case(Control_in)
-
-4'b0000: begin zero <= 8; ALU_Result <= A & B; end
-
-4'b0001: begin zero <= 8; ALU_Result <= A B; end
-
-4'b0010: begin zero <= 8; ALU_Result <= A + B; end
-
-4'b0110: begin if(A==B) zero <= 1; else zero <=0; ALU_Result <= A - B; end
-
-endcase
-end
-endmodule
+module ALU_32bit( 
+    input [31:0] a, b, 
+    input [3:0] alu_control, 
+    output reg [31:0] result, 
+    output zero 
+);
+    always @(*) 
+    begin 
+        case(alu_control) 
+            4'b0000: result = a & b; 
+            4'b0001: result = a | b; 
+            4'b0010: result = a + b; 
+            4'b0110: result = a - b; 
+            4'b0011: result = ~a;   
+            4'b1101: result = a ^ b; 
+            4'b0100: result = ~(a & b); 
+            4'b0111: result = ~(a | b); 
+            4'b1001: result = a << 1; 
+            4'b1010: result = a >> 1; 
+            4'b1011: result = $signed(a) >>> 1; 
+            4'b1000: result = (a < b) ? 32'b1 : 32'b0; 
+        default: result = 32'b0; 
+        endcase 
+end 
+assign zero = (result == 32'b0) ? 1'b1 : 1'b0; 
+endmodule 
 
 // ALU Control
-
-module ALU_Control (ALUOP, fun7, fun3, Control_out);
-
-input fun7;
-
-input [2:0] fun3;
-
-input [1:0] ALUOP;
-
-output reg [3:0] Control_out;
-
-always (*)
-
-begin
-
-case((ALUOP, fun7, fun3))
-
-6'600_0_000: Control_out <= 4'b0010;
-
-6'b01_0_000: Control_out <= 4'b0110;
-
-6'b10_0_000: Control_out <= 4°b0010;
-
-6'b10_1_000: Control_out <= 4'b0110;
-
-6'b10_0_111: Control_out <= 4'b0000;
-
-6'b10_0_110: Control_out <= 4'b0001;
-
-end
-
-endcase
-
-endmodule
+module ALU_Control( 
+    input [1:0] PC_IN, 
+    input [5:0] PC_OUT, 
+    output reg [3:0] Control_Output 
+); 
+    always @(*) begin 
+        case (PC_IN) 
+            2'b00: Control_Output = 4'b0010; 
+            2'b01: Control_Output = 4'b0110; 
+            2'b10: begin 
+                case (PC_OUT) 
+                    6'b100000: Control_Output = 4'b0010; 
+                    6'b100010: Control_Output = 4'b0110; 
+                    6'b100100: Control_Output = 4'b0000; 
+                    6'b100101: Control_Output = 4'b0001; 
+                    6'b100110: Control_Output = 4'b1101; 
+                    6'b100111: Control_Output = 4'b0111; 
+                    6'b101010: Control_Output = 4'b1000; 
+                    6'b000000: Control_Output = 4'b1001; 
+                    6'b000010: Control_Output = 4'b1010; 
+                    6'b000011: Control_Output = 4'b1011; 
+                    default: Control_Output = 4'b0000; 
+endcase 
+end 
+default: Control_Output = 4'b0000; 
+endcase 
+end 
+endmodule 
 
 // Data Memory
-
-module Data_Memory(clk, reset, MemWrite, MemRead, read_address, Write_data, MemData_out);
-
-input clk, reset, Memwrite, MemRead;
-
-input [31:0] read_address, Write_data;
-
-output [31:0] MemData_out;
-
-integer k;
-
-reg [31:0] D_Memory [63:0];
-
-always (posedge clk or posedge reset)
-
+module data_memory(clk, reset, Mread,
+Mwrite, Adder, Wdata, Mout);
+input clk, reset, Mread, Mwrite;
+input [31:0] Adder, Wdata;
+output [31:0] Mout;
+reg [31:0] D_Mem[63:0];
+integer i;
+always @(posedge clk)
 begin
-
-if(reset)
-
-begin
-
-for(k=0; k<64; k=k+1)begin
-
-D_Memory[k] <= 32'b00;
-
+ if (reset) begin
+ for (i = 0; i < 64; i = i + 1) begin
+ D_Mem[i] = 32'h00000000;
+ end
+ end
+ else if (Mwrite) begin
+ D_Mem[i] = Wdata;
+ end
 end
-
-end
-
-else if (MemWrite) begin
-
-D_Memory [read_address] <= Write_data;
-
-end
-
-end
-
-assign MemData_out = (MemRead) ? D_Memory [read_address]: 32'b00;
-
+assign Mout = Mread ? D_Mem[i] : 32'b0;
 endmodule
 
-// Multiplexers
 
-//Mux 1
-module Mux1 (sell, A1, B1, Mux1_out);
-
-input sell;
-
-input [31:0] A1, B1;
-
-output [31:0] Mux1_out;
-
-assign Mux1_out (sel1==1'b0) ? A1: B1;
-
+//MUX
+module Mux1 (sel, A, B, Mux_out);
+input sel;
+input [31:0] A, B;
+output [31:0] Mux_out;
+assign Mux_out (se1==1) ? A: B;
 endmodule
 
-//Mux 2
-
-module Mux2(sel2, A2, B2, Mux2_out);
-
-input sel2;
-
-input [31:0] A2, B2;
-
-output [31:0] Mux2_out;
-
-assign Mux2_out = (sel2==1'b0) ? A2: B2;
-
-endmodule
-
-//Mux 3
-
-module Mux3(sel3, A3, B3, Mux3_out);
-
-input sel3;
-
-input [31:0] A3, B3;
-
-output [31:0] Mux3_out;
-
-assign Mux2_out = (sel3==1'b0) ? A3: B3;
-
-endmodule
-
-// AND logic
-
-module AND_logic(branch, zero, and_out);
-
-input branch, zero;
-
-output and_out;
-
-assign and_out = branch & zero;
-
-endmodule
 
 // Adder
-
-module Adder (in_1, in_2, Sum_out);
-
-input [31:0] in_1, in_2;
-
+module Adder (I1, I2, Sum_out);
+input [31:0] I1, I2;
 output [31:0] Sum_out;
-
-assign Sum_out = in_1 + in_2;
-
+assign Sum_out = I1 + I2;
 endmodule
