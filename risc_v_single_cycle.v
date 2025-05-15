@@ -1,6 +1,5 @@
 // Program Counter
-module ProgramCounter(clk, rst,
-nextAddr, currAddr);
+module ProgramCounter(clk, rst, nextAddr, currAddr);
  input clk, rst;
  input [31:0] nextAddr;
  output reg [31:0] currAddr;
@@ -14,8 +13,7 @@ nextAddr, currAddr);
 endmodule
 
 // Instruction Memory
-module instruction_memory(pc,
-instruction);
+module instruction_memory(pc, instruction);
  input [31:0] pc;
  output [31:0] instruction;
  reg [31:0] imem [63:0];
@@ -33,9 +31,7 @@ instruction);
 endmodule
 
 //Register File
-module RegFile (clk,reset,
-reg_write,read_reg1,read_reg2,
-write_reg,write_data,read_data1,read_data2
+module RegFile (clk,reset, reg_write,read_reg1,read_reg2, write_reg,write_data,read_data1,read_data2
 );
  input clk, reset, reg_write;
  input [4:0] read_reg1, read_reg2,
@@ -74,8 +70,7 @@ end
 endmodule 
 
 // Control Unit
-module Control_Unit(opcode, Branch, MemRead, MemtoReg, ALUOp, MemWrite,
-ALUSrc, RegWrite);
+module Control_Unit(opcode, Branch, MemRead, MemtoReg, ALUOp, MemWrite, ALUSrc, RegWrite);
 input [6:0] opcode;
 output reg Branch, MemRead, MemtoReg;
 output reg [1:0] ALUOp;
@@ -155,8 +150,7 @@ end
 endmodule 
 
 // Data Memory
-module data_memory(clk, reset, Mread,
-Mwrite, Adder, Wdata, Mout);
+ module data_memory(clk, reset, Mread, Mwrite, Adder, Wdata, Mout);
 input clk, reset, Mread, Mwrite;
 input [31:0] Adder, Wdata;
 output [31:0] Mout;
@@ -192,3 +186,45 @@ input [31:0] I1, I2;
 output [31:0] Sum_out;
 assign Sum_out = I1 + I2;
 endmodule
+
+//All Module 
+module top (clk, reset);
+input clk, reset;
+
+//Program Counter
+ ProgramCounter PC(.clk(clk), .rst(reset), .nextAddr(), .currAddr());
+
+//Instruction Memory
+ instruction_memory Inst_Memory(.pc(), .instruction());
+
+//Register File
+ RegFile Register_File(.clk(clk), .reset(reset), .reg_write(), .read_reg1(), .read_reg2(), .write_reg(), .write_data(), .read_data1(), .read_data2()
+);
+
+//Immediate Generator
+ ImmGen Imm_Gen( .Opcode(), .Instr(), .Imm_Out());
+
+//Control Unit
+ Control_Unit CU( .opcode(), .Branch(), .MemRead(), .MemtoReg(), .ALUOp(), .MemWrite(), .ALUSrc(), .RegWrite());
+
+//ALU
+ ALU_unit ALUU( .A(), .B(), .Control_in(), .ALU_Result(), .zero());
+
+//ALU Control
+ module ALU_Control( 
+    input [1:0] PC_IN, 
+    input [5:0] PC_OUT, 
+    output reg [3:0] Control_Output 
+); 
+
+//Data Memory 
+  data_memory DM(.clk(clk), .reset(reset), .Mread(), .Mwrite(), .Adder(), .Wdata(), .Mout());
+
+ //MUX
+  Mux1 M1(.sel(), .A(), .B(), .Mux_out());
+
+ //Adder
+  Adder adder(.I1(), .I2(), .Sum_out()); 
+
+ //ALU Module
+  top (.clk(clk), .reset(reset)); 
