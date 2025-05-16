@@ -190,32 +190,28 @@ endmodule
 //All Module 
 module top (clk, reset);
 input clk, reset;
-
+ wire [31:0] inst_top;
 //Program Counter
  ProgramCounter PC(.clk(clk), .rst(reset), .nextAddr(), .currAddr());
 
 //Instruction Memory
- instruction_memory Inst_Memory(.pc(), .instruction());
+ instruction_memory Inst_Memory(.pc(), .instruction(inst_top));
 
 //Register File
- RegFile Register_File(.clk(clk), .reset(reset), .reg_write(), .read_reg1(), .read_reg2(), .write_reg(), .write_data(), .read_data1(), .read_data2()
+ RegFile Register_File(.clk(clk), .reset(reset), .reg_write(), .read_reg1(inst_top[19:15]), .read_reg2(inst_top[24:20]), .write_reg(inst_top[11:7]), .write_data(), .read_data1(), .read_data2()
 );
 
 //Immediate Generator
  ImmGen Imm_Gen( .Opcode(), .Instr(), .Imm_Out());
 
 //Control Unit
- Control_Unit CU( .opcode(), .Branch(), .MemRead(), .MemtoReg(), .ALUOp(), .MemWrite(), .ALUSrc(), .RegWrite());
+ Control_Unit CU( .opcode(inst_top[6:0]), .Branch(), .MemRead(), .MemtoReg(), .ALUOp(), .MemWrite(), .ALUSrc(), .RegWrite());
 
 //ALU
  ALU_unit ALUU( .A(), .B(), .Control_in(), .ALU_Result(), .zero());
 
 //ALU Control
- module ALU_Control( 
-    input [1:0] PC_IN, 
-    input [5:0] PC_OUT, 
-    output reg [3:0] Control_Output 
-); 
+ ALU_Control ALU2( .PC_IN(), .PC_OUT(), .Control_Output()); 
 
 //Data Memory 
   data_memory DM(.clk(clk), .reset(reset), .Mread(), .Mwrite(), .Adder(), .Wdata(), .Mout());
