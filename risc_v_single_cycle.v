@@ -47,17 +47,39 @@ module instruction_memory(
     
     initial begin
         for (i = 0; i < 64; i = i + 1)
-            imem[i] = 32'h00000013;  // NOP instruction
+            imem[i] = 32'b0;
         
-        // Sample program - load into instruction memory
-        imem[0] = 32'h00500113;  // addi x2, x0, 5
-        imem[1] = 32'h00300193;  // addi x3, x0, 3
-        imem[2] = 32'h002081b3;  // add x3, x1, x2
-        imem[3] = 32'h00312233;  // slt x4, x2, x3
-        imem[4] = 32'hfe310ae3;  // beq x2, x3, -12
+        // R-type
+        imem[0] = 32'b00000000000000000000000000000000;
+        imem[1] = 32'b00000001100110000000011010110011;
+        imem[2] = 32'b01000000001101000000001010110011;
+        imem[3] = 32'b00000000001100010111000010110011;
+        imem[4] = 32'b00000000010100011110001000110011;
+        imem[5] = 32'b00000000010100011100001000110011;
+        imem[6] = 32'b00000000010100011001001000110011;
+        
+        // I-type
+        imem[10] = 32'b00000000001010101000101100010011;
+        imem[11] = 32'b00000000001101000110010010010011;
+        imem[12] = 32'b00000000010001000100010010010011;
+        imem[13] = 32'b00000000010100010111000010010011;
+        imem[14] = 32'b00000000011000011001001000010011;
+        
+        // L-type
+        imem[20] = 32'b00000000111100010010010000000011;
+        
+        // S-type
+        imem[22] = 32'b00000000111000110010011000100011;
+        
+        // B-type
+        imem[23] = 32'b00000000100101001000011001100011;
+        imem[24] = 32'b00000000100101001001011101100011;
+        
+        // J-type
+        imem[27] = 32'b00000000001000010100000011101111;
     end
     
-    assign instruction = imem[pc[31:2]];
+    assign instruction = imem[pc[7:2]];
 endmodule
 
 // Register File
@@ -68,18 +90,49 @@ module RegFile(
     output [31:0] read_data1, read_data2
 );
     reg [31:0] registers [31:0];
+    
+    initial begin
+        registers[0] = 0;
+        registers[1] = 15;
+        registers[2] = 8;
+        registers[3] = 25;
+        registers[4] = 100;
+        registers[5] = 7;
+        registers[6] = 64;
+        registers[7] = 13;
+        registers[8] = 16;
+        registers[9] = 9;
+        registers[10] = 45;
+        registers[11] = 21;
+        registers[12] = 128;
+        registers[13] = 33;
+        registers[14] = 77;
+        registers[15] = 55;
+        registers[16] = 88;
+        registers[17] = 120;
+        registers[18] = 200;
+        registers[19] = 150;
+        registers[20] = 180;
+        registers[21] = 95;
+        registers[22] = 110;
+        registers[23] = 75;
+        registers[24] = 160;
+        registers[25] = 85;
+        registers[26] = 42;
+        registers[27] = 66;
+        registers[28] = 37;
+        registers[29] = 144;
+        registers[30] = 29;
+        registers[31] = 199;
+    end
+
     integer k;
     
-    always @(posedge clk) begin
-        if (reset) begin
-            for (k = 0; k < 32; k = k + 1)
-                registers[k] <= 32'b0;
-        end
-        else if (reg_write) begin
-            if (write_reg != 5'b0)  // Don't write to x0
-                registers[write_reg] <= write_data;
-        end
+always @(posedge clk) begin
+    if (reg_write && !reset) begin
+        registers[write_reg] <= write_data;
     end
+end
     
     assign read_data1 = registers[read_reg1];
     assign read_data2 = registers[read_reg2];
@@ -94,25 +147,29 @@ module Control_Unit(
 );
     always @(*) begin
         case (opcode)
-            7'b0000011: begin // Load
+            7'b0000011: begin
                 Branch <= 1'b0; MemRead <= 1'b1; MemtoReg <= 1'b1; 
                 ALUOp <= 2'b00; MemWrite <= 1'b0; ALUSrc <= 1'b1; RegWrite <= 1'b1;
             end
-            7'b0100011: begin // Store
-                Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'bx; 
+            7'b0100011: begin
+                Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'b0; 
                 ALUOp <= 2'b00; MemWrite <= 1'b1; ALUSrc <= 1'b1; RegWrite <= 1'b0;
             end
-            7'b1100011: begin // Branch
-                Branch <= 1'b1; MemRead <= 1'b0; MemtoReg <= 1'bx; 
+            7'b1100011: begin
+                Branch <= 1'b1; MemRead <= 1'b0; MemtoReg <= 1'b0; 
                 ALUOp <= 2'b01; MemWrite <= 1'b0; ALUSrc <= 1'b0; RegWrite <= 1'b0;
             end
-            7'b0110011: begin // R-type
+            7'b0110011: begin
                 Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'b0; 
                 ALUOp <= 2'b10; MemWrite <= 1'b0; ALUSrc <= 1'b0; RegWrite <= 1'b1;
             end
-            7'b0010011: begin // I-type (ADDI, etc.)
+            7'b0010011: begin
                 Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'b0; 
                 ALUOp <= 2'b10; MemWrite <= 1'b0; ALUSrc <= 1'b1; RegWrite <= 1'b1;
+            end
+            7'b1101111: begin
+                Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'b0; 
+                ALUOp <= 2'b10; MemWrite <= 1'b0; ALUSrc <= 1'b0; RegWrite <= 1'b1;
             end
             default: begin
                 Branch <= 1'b0; MemRead <= 1'b0; MemtoReg <= 1'b0;
@@ -124,17 +181,19 @@ endmodule
 
 // Immediate Generator
 module ImmGen(
-    input [6:0] Opcode,
     input [31:0] Instr,
     output reg [31:0] Imm_Out
 );
+    wire [6:0] Opcode = Instr[6:0];
+    
     always @(*) begin
         case (Opcode)
-            7'b0010011: Imm_Out <= {{20{Instr[31]}}, Instr[31:20]}; // I-type 
-            7'b0000011: Imm_Out <= {{20{Instr[31]}}, Instr[31:20]}; // I-type (load)
-            7'b0100011: Imm_Out <= {{20{Instr[31]}}, Instr[31:25], Instr[11:7]}; // S-type
-            7'b1100011: Imm_Out <= {{19{Instr[31]}}, Instr[31], Instr[7], Instr[30:25], Instr[11:8], 1'b0}; // SB-type
-            default:    Imm_Out <= 32'b0;
+            7'b0010011: Imm_Out <= {{20{Instr[31]}}, Instr[31:20]};
+            7'b0000011: Imm_Out <= {{20{Instr[31]}}, Instr[31:20]};
+            7'b0100011: Imm_Out <= {{20{Instr[31]}}, Instr[31:25], Instr[11:7]};
+            7'b1100011: Imm_Out <= {{19{Instr[31]}}, Instr[31], Instr[7], Instr[30:25], Instr[11:8], 1'b0};
+            7'b1101111: Imm_Out <= {{11{Instr[31]}}, Instr[19:12], Instr[20], Instr[30:21], 1'b0};
+            default: Imm_Out <= 32'b0;
         endcase
     end
 endmodule
@@ -146,20 +205,15 @@ module ALU_32bit(
     output reg [31:0] result,
     output zero
 );
-    always @(*) begin
+    always @(a or b or alu_control) begin
         case(alu_control)
-            4'b0000: result <= a & b;
-            4'b0001: result <= a | b;
-            4'b0010: result <= a + b;
-            4'b0110: result <= a - b;
-            4'b0011: result <= ~a;
-            4'b1101: result <= a ^ b;
-            4'b0100: result <= ~(a & b);
-            4'b0111: result <= ~(a | b);
-            4'b1001: result <= a << 1;
-            4'b1010: result <= a >> 1;
-            4'b1011: result <= $signed(a) >>> 1;
-            4'b1000: result <= ($signed(a) < $signed(b)) ? 32'b1 : 32'b0;
+            4'b0000: result <= a + b;
+            4'b0001: result <= a - b;
+            4'b0010: result <= a & b;
+            4'b0011: result <= a | b;
+            4'b0100: result <= a ^ b;
+            4'b0101: result <= a << b[4:0];
+            4'b0110: result <= a >> b[4:0];
             default: result <= 32'b0;
         endcase
     end
@@ -176,22 +230,35 @@ module ALU_Control(
 );
     always @(*) begin
         case (ALUOp)
-            2'b00: ALUcontrol_Out <= 4'b0010; // Load/Store: Add
-            2'b01: ALUcontrol_Out <= 4'b0110; // Branch: Subtract
+            2'b00: begin
+                ALUcontrol_Out <= 4'b0000;
+            end
+            2'b01: begin
+                ALUcontrol_Out <= 4'b0001;
+            end
             2'b10: begin
                 case (funct3)
                     3'b000: begin
                         if (funct7 == 7'b0000000)
-                            ALUcontrol_Out <= 4'b0010; // ADD
+                            ALUcontrol_Out <= 4'b0000;
+                        else if (funct7 == 7'b0100000)
+                            ALUcontrol_Out <= 4'b0001;
                         else
-                            ALUcontrol_Out <= 4'b0110; // SUB
+                            ALUcontrol_Out <= 4'b0000;
                     end
-                    3'b001: ALUcontrol_Out <= 4'b1001; // SLL
-                    3'b010: ALUcontrol_Out <= 4'b1000; // SLT
-                    3'b100: ALUcontrol_Out <= 4'b0000; // AND
-                    3'b101: ALUcontrol_Out <= 4'b0001; // OR
-                    3'b110: ALUcontrol_Out <= 4'b1101; // XOR
-                    3'b111: ALUcontrol_Out <= 4'b0111; // NAND
+                    3'b111: ALUcontrol_Out <= 4'b0010;
+                    3'b110: ALUcontrol_Out <= 4'b0011;
+                    3'b100: ALUcontrol_Out <= 4'b0100;
+                    3'b001: ALUcontrol_Out <= 4'b0101;
+                    3'b101: begin
+                        if (funct7 == 7'b0000000)
+                            ALUcontrol_Out <= 4'b0110;
+                        else if (funct7 == 7'b0100000)
+                            ALUcontrol_Out <= 4'b0111;
+                        else
+                            ALUcontrol_Out <= 4'b0110;
+                    end
+                    3'b010: ALUcontrol_Out <= 4'b1000;
                     default: ALUcontrol_Out <= 4'b0000;
                 endcase
             end
@@ -213,25 +280,39 @@ module MUX2to1(
 endmodule
 
 // Data Memory
-module data_memory(
-    input clk, reset, Mread, Mwrite,
-    input [31:0] addr, Wdata,
-    output [31:0] Mout
+module Data_Memory(
+    input clk,               
+    input rst,               
+    input MemRead,           
+    input MemWrite,          
+    input [31:0] address,    
+    input [31:0] write_data, 
+    output [31:0] read_data 
 );
-    reg [31:0] D_Mem[63:0];
-    integer i;
-    
-    always @(posedge clk) begin
-        if (reset) begin
-            for (i = 0; i < 64; i = i + 1)
-                D_Mem[i] <= 32'h00000000;
+    reg [31:0] D_Memory [63:0];
+    integer k;
+
+    initial begin
+        for (k = 0; k < 64; k = k + 1) begin
+            D_Memory[k] = 32'b0;
         end
-        else if (Mwrite) begin
-            D_Mem[addr[7:2]] <= Wdata;
+        D_Memory[15] = 65;
+        D_Memory[17] = 56;
+    end
+
+    assign read_data = (MemRead) ? D_Memory[address[7:2]] : 32'b0;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            for (k = 0; k < 64; k = k + 1) begin
+                D_Memory[k] <= 32'b0;
+            end
+            D_Memory[15] <= 65;
+            D_Memory[17] <= 56;
+        end else if (MemWrite) begin
+            D_Memory[address[7:2]] <= write_data;
         end
     end
-    
-    assign Mout = Mread ? D_Mem[addr[7:2]] : 32'b0;
 endmodule
 
 // Branch Adder
@@ -249,7 +330,6 @@ endmodule
 module RISCV_Top(
     input clk, rst
 );
-    // Wire declarations
     wire [31:0] pc_out_wire, pc_next_wire, pc_wire, instruction_wire;
     wire [31:0] read_data1_wire, read_data2_wire, write_data_wire;
     wire [31:0] branch_target_wire, imm_gen_wire, alu_mux_out_wire;
@@ -260,10 +340,8 @@ module RISCV_Top(
     wire [1:0] ALUOp_wire;
     wire [3:0] ALUcontrol_wire;
 
-    // Branch condition check
     assign branch_select = Branch_wire & Zero_wire;
 
-    // Program Counter
     ProgramCounter PC(
         .clk(clk),
         .rst(rst),
@@ -271,20 +349,17 @@ module RISCV_Top(
         .currAddr(pc_out_wire)
     );
 
-    // PC Adder
     pc_adder PC_Adder(
         .pc_in(pc_out_wire),
         .pc_next(pc_next_wire)
     );
 
-    // Branch Adder
-    Branch_Adder BA(  // Different instance name to avoid conflict
+    Branch_Adder BA(
         .PC(pc_out_wire),
         .offset(imm_gen_wire),
         .branch_target(branch_target_wire)
     );
 
-    // PC Mux
     pc_mux PC_Mux(
         .pc_in(pc_next_wire),
         .pc_branch(branch_target_wire),
@@ -292,13 +367,11 @@ module RISCV_Top(
         .pc_out(pc_wire)
     );
 
-    // Instruction Memory
     instruction_memory Instr_Mem(
         .pc(pc_out_wire),
         .instruction(instruction_wire)
     );
 
-    // Control Unit
     Control_Unit Control(
         .opcode(instruction_wire[6:0]),
         .Branch(Branch_wire),
@@ -310,7 +383,6 @@ module RISCV_Top(
         .RegWrite(RegWrite_wire)
     );
 
-    // Register File
     RegFile Register_File(
         .clk(clk),
         .reset(rst),
@@ -323,14 +395,11 @@ module RISCV_Top(
         .read_data2(read_data2_wire)
     );
 
-    // Immediate Generator
     ImmGen Imm_Gen(
-        .Opcode(instruction_wire[6:0]),
         .Instr(instruction_wire),
         .Imm_Out(imm_gen_wire)
     );
 
-    // ALU Source Mux
     MUX2to1 ALU_Src_Mux(
         .input0(read_data2_wire),
         .input1(imm_gen_wire),
@@ -338,7 +407,6 @@ module RISCV_Top(
         .out(alu_mux_out_wire)
     );
 
-    // ALU Control
     ALU_Control ALU_Ctrl(
         .ALUOp(ALUOp_wire),
         .funct3(instruction_wire[14:12]),
@@ -346,7 +414,6 @@ module RISCV_Top(
         .ALUcontrol_Out(ALUcontrol_wire)
     );
 
-    // ALU
     ALU_32bit ALU(
         .a(read_data1_wire),
         .b(alu_mux_out_wire),
@@ -355,18 +422,16 @@ module RISCV_Top(
         .zero(Zero_wire)
     );
 
-    // Data Memory
-    data_memory Data_Mem(
+    Data_Memory Data_Mem(
         .clk(clk),
-        .reset(rst),
-        .Mread(MemRead_wire),
-        .Mwrite(MemWrite_wire),
-        .addr(alu_result_wire),
-        .Wdata(read_data2_wire),
-        .Mout(data_mem_out_wire)
+        .rst(rst),
+        .MemRead(MemRead_wire),
+        .MemWrite(MemWrite_wire),
+        .address(alu_result_wire),
+        .write_data(read_data2_wire),
+        .read_data(data_mem_out_wire)
     );
 
-    // Memory to Register Mux
     MUX2to1 WB_Mux(
         .input0(alu_result_wire),
         .input1(data_mem_out_wire),
@@ -380,19 +445,16 @@ endmodule
 module RISCV_Top_Tb;
     reg clk, rst;
     
-    // Instantiate processor
     RISCV_Top UUT (
         .clk(clk), 
         .rst(rst)
     );
     
-    // Clock generation
     initial begin
         clk = 0;
     end
     always #50 clk = ~clk; 
     
-    // Reset and simulation control
     initial begin
         rst = 1'b1;
         #100;
@@ -400,4 +462,4 @@ module RISCV_Top_Tb;
         #5000; 
         $finish; 
     end
-endmodule
+endmodule 
