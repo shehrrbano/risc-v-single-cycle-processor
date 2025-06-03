@@ -1,0 +1,907 @@
+// Program Counter
+module ProgramCounter(
+    input clk, rst, pc_write,
+    input [31:0] nextAddr,
+    output reg [31:0] currAddr
+);
+    always @(posedge clk) begin
+        if (rst)
+            currAddr <= 32'd0;
+        else if (pc_write)
+            currAddr <= nextAddr;
+    end
+endmodule
+
+// PC Adder
+module pc_adder(
+    input [31:0] pc_in,       
+    output reg [31:0] pc_next 
+);
+    always @(*) begin
+        pc_next = pc_in + 4;
+    end
+endmodule
+
+// PC Mux
+module pc_mux(
+    input [31:0] pc_in,       
+    input [31:0] pc_branch,   
+    input pc_select,          
+    output reg [31:0] pc_out  
+);
+    always @(*) begin
+        if (pc_select == 1'b0)
+            pc_out = pc_in;
+        else
+            pc_out = pc_branch;
+    end
+endmodule
+
+// Instruction Memory - FIXED: Corrected instruction encodings
+module instruction_memory(
+    input [31:0] pc,
+    output [31:0] instruction
+);
+    reg [31:0] imem [63:0];
+    integer i;
+    
+    initial begin
+        for (i = 0; i < 64; i = i + 1)
+            imem[i] = 32'b0;
+        
+        // FIXED: Correct instruction encodings
+        imem[0] = 32'h00110113; // addi x2, x2, 1
+        imem[1] = 32'h00120213; // addi x4, x4, 1  
+        imem[2] = 32'h00420333; // add x6, x4, x4
+        imem[3] = 32'h00112403; // lw x8, 1(x2)
+        imem[4] = 32'h00820533; // add x10, x4, x8
+        imem[5] = 32'h008120A3; // sw x8, 1(x2) - FIXED: Proper store encoding
+        imem[6] = 32'h00110113; // addi x2, x2, 1
+        imem[7] = 32'h00120213; // addi x4, x4, 1
+    end
+    
+    assign instruction = imem[pc[7:2]];
+endmodule
+
+// Register File
+module RegFile(
+    input clk, reset, reg_write,
+    input [4:0] read_reg1, read_reg2, write_reg,
+    input [31:0] write_data,
+    output [31:0] read_data1, read_data2
+);
+    reg [31:0] registers [31:0];
+    
+    initial begin
+        registers[0] = 0;
+        registers[1] = 15;
+        registers[2] = 8;
+        registers[3] = 25;
+        registers[4] = 100;
+        registers[5] = 7;
+        registers[6] = 64;
+        registers[7] = 13;
+        registers[8] = 16;
+        registers[9] = 9;
+        registers[10] = 45;
+        registers[11] = 21;
+        registers[12] = 128;
+        registers[13] = 33;
+        registers[14] = 77;
+        registers[15] = 55;
+        registers[16] = 88;
+        registers[17] = 120;
+        registers[18] = 200;
+        registers[19] = 150;
+        registers[20] = 180;
+        registers[21] = 95;
+        registers[22] = 110;
+        registers[23] = 75;
+        registers[24] = 160;
+        registers[25] = 85;
+        registers[26] = 42;
+        registers[27] = 66;
+        registers[28] = 37;
+        registers[29] = 144;
+        registers[30] = 29;
+        registers[31] = 199;
+    end
+
+    integer k;
+    
+    always @(posedge clk) begin
+        if (reg_write && !reset && write_reg != 0) begin
+            registers[write_reg] <= write_data;
+        end
+    end
+    
+    assign read_data1 = registers[read_reg1];
+    assign read_data2 = registers[read_reg2];
+endmodule
+
+// Control Unit
+module Control_Unit(
+    input [6:0] opcode,
+    output reg Branch, MemRead, MemtoReg,
+    output reg [1:0] ALUOp,
+    output reg MemWrite, ALUSrc, RegWrite
+);
+    always @(*) begin
+        case (opcode)
+            7'b0000011: begin // Load
+                Branch = 1'b0; MemRead = 1'b1; MemtoReg = 1'b1; 
+                ALUOp = 2'b00; MemWrite = 1'b0; ALUSrc = 1'b1; RegWrite = 1'b1;
+            end
+            7'b0100011: begin // Store
+                Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'b0; 
+                ALUOp = 2'b00; MemWrite = 1'b1; ALUSrc = 1'b1; RegWrite = 1'b0;
+            end
+            7'b1100011: begin // Branch
+                Branch = 1'b1; MemRead = 1'b0; MemtoReg = 1'b0; 
+                ALUOp = 2'b01; MemWrite = 1'b0; ALUSrc = 1'b0; RegWrite = 1'b0;
+            end
+            7'b0110011: begin // R-type
+                Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'b0; 
+                ALUOp = 2'b10; MemWrite = 1'b0; ALUSrc = 1'b0; RegWrite = 1'b1;
+            end
+            7'b0010011: begin // I-type
+                Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'b0; 
+                ALUOp = 2'b10; MemWrite = 1'b0; ALUSrc = 1'b1; RegWrite = 1'b1;
+            end
+            default: begin
+                Branch = 1'b0; MemRead = 1'b0; MemtoReg = 1'b0;
+                ALUOp = 2'b00; MemWrite = 1'b0; ALUSrc = 1'b0; RegWrite = 1'b0;
+            end
+        endcase
+    end
+endmodule
+
+// Immediate Generator
+module ImmGen(
+    input [31:0] Instr,
+    output reg [31:0] Imm_Out
+);
+    wire [6:0] Opcode = Instr[6:0];
+    
+    always @(*) begin
+        case (Opcode)
+            7'b0010011: Imm_Out = {{20{Instr[31]}}, Instr[31:20]};
+            7'b0000011: Imm_Out = {{20{Instr[31]}}, Instr[31:20]};
+            7'b0100011: Imm_Out = {{20{Instr[31]}}, Instr[31:25], Instr[11:7]};
+            7'b1100011: Imm_Out = {{19{Instr[31]}}, Instr[31], Instr[7], Instr[30:25], Instr[11:8], 1'b0};
+            default: Imm_Out = 32'b0;
+        endcase
+    end
+endmodule
+
+// ALU
+module ALU_32bit(
+    input [31:0] a, b,
+    input [3:0] alu_control,
+    output reg [31:0] result,
+    output zero
+);
+    always @(*) begin
+        case(alu_control)
+            4'b0000: result = a + b;
+            4'b0001: result = a - b;
+            4'b0010: result = a & b;
+            4'b0011: result = a | b;
+            4'b0100: result = a ^ b;
+            4'b0101: result = a << b[4:0];
+            4'b0110: result = a >> b[4:0];
+            default: result = 32'b0;
+        endcase
+    end
+    
+    assign zero = (result == 32'b0) ? 1'b1 : 1'b0;
+endmodule
+
+// ALU Control
+module ALU_Control(
+    input [1:0] ALUOp,
+    input [2:0] funct3,
+    input [6:0] funct7,
+    output reg [3:0] ALUcontrol_Out
+);
+    always @(*) begin
+        case (ALUOp)
+            2'b00: ALUcontrol_Out = 4'b0000;
+            2'b01: ALUcontrol_Out = 4'b0001;
+            2'b10: begin
+                case (funct3)
+                    3'b000: begin
+                        if (funct7 == 7'b0000000)
+                            ALUcontrol_Out = 4'b0000;
+                        else if (funct7 == 7'b0100000)
+                            ALUcontrol_Out = 4'b0001;
+                        else
+                            ALUcontrol_Out = 4'b0000;
+                    end
+                    3'b111: ALUcontrol_Out = 4'b0010;
+                    3'b110: ALUcontrol_Out = 4'b0011;
+                    3'b100: ALUcontrol_Out = 4'b0100;
+                    3'b001: ALUcontrol_Out = 4'b0101;
+                    3'b101: ALUcontrol_Out = 4'b0110;
+                    default: ALUcontrol_Out = 4'b0000;
+                endcase
+            end
+            default: ALUcontrol_Out = 4'b0000;
+        endcase
+    end
+endmodule
+
+// 2-to-1 Mux
+module MUX2to1(
+    input [31:0] input0,
+    input [31:0] input1,
+    input select,
+    output reg [31:0] out
+);
+    always @(*) begin
+        out = select ? input1 : input0;
+    end
+endmodule
+
+// 3-to-1 Mux for forwarding
+module MUX3to1(
+    input [31:0] input0,
+    input [31:0] input1,
+    input [31:0] input2,
+    input [1:0] select,
+    output reg [31:0] out
+);
+    always @(*) begin
+        case(select)
+            2'b00: out = input0;
+            2'b01: out = input1;
+            2'b10: out = input2;
+            default: out = input0;
+        endcase
+    end
+endmodule
+
+// Data Memory
+module Data_Memory(
+    input clk,               
+    input rst,               
+    input MemRead,           
+    input MemWrite,          
+    input [31:0] address,    
+    input [31:0] write_data, 
+    output [31:0] read_data 
+);
+    reg [31:0] D_Memory [63:0];
+    integer k;
+
+    initial begin
+        for (k = 0; k < 64; k = k + 1) begin
+            D_Memory[k] = 32'b0;
+        end
+        D_Memory[1] = 100;
+        D_Memory[2] = 200;
+    end
+
+    assign read_data = (MemRead) ? D_Memory[address[7:2]] : 32'b0;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            for (k = 0; k < 64; k = k + 1) begin
+                D_Memory[k] <= 32'b0;
+            end
+            D_Memory[1] <= 100;
+            D_Memory[2] <= 200;
+        end else if (MemWrite) begin
+            D_Memory[address[7:2]] <= write_data;
+        end
+    end
+endmodule
+
+// Branch Adder
+module Branch_Adder(
+    input [31:0] PC,
+    input [31:0] offset,
+    output reg [31:0] branch_target
+);
+    always @(*) begin
+        branch_target = PC + offset;
+    end
+endmodule
+
+// IF/ID Pipeline Register
+module IFID_Register (
+    input clk, rst, if_id_write,
+    input[31:0] pc_in,
+    output reg [31:0] pc_out,
+    input [31:0] instruction_in,
+    output reg [31:0] instruction_out
+);
+    always @ (posedge clk) begin
+        if (rst) begin
+            pc_out <= 32'b0;
+            instruction_out <= 32'b0;
+        end
+        else if (if_id_write) begin
+            pc_out <= pc_in;
+            instruction_out <= instruction_in;
+        end
+    end
+endmodule
+
+// ID/EX Pipeline Register
+module IDEX_Register(
+    input clk, rst,
+    input RegWrite_in, ALUSrc_in, MemRead_in, MemWrite_in, MemtoReg_in, Branch_in,
+    input [1:0] ALUOp_in,
+    input [31:0] pc_in, read_data1_in, read_data2_in, imm_in,
+    input [4:0] rs1_in, rs2_in, rd_in,
+    input [2:0] funct3_in,
+    input [6:0] funct7_in,
+    output reg RegWrite_out, ALUSrc_out, MemRead_out, MemWrite_out,
+    MemtoReg_out, Branch_out,
+    output reg [1:0] ALUOp_out,
+    output reg [31:0] pc_out, read_data1_out, read_data2_out, imm_out,
+    output reg [4:0] rs1_out, rs2_out, rd_out,
+    output reg [2:0] funct3_out,
+    output reg [6:0] funct7_out
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            RegWrite_out <= 1'b0;
+            ALUSrc_out <= 1'b0;
+            MemRead_out <= 1'b0;
+            MemWrite_out <= 1'b0;
+            MemtoReg_out <= 1'b0;
+            Branch_out <= 1'b0;
+            ALUOp_out <= 2'b00;
+            pc_out <= 32'b0;
+            read_data1_out <= 32'b0;
+            read_data2_out <= 32'b0;
+            imm_out <= 32'b0;
+            rs1_out <= 5'b0;
+            rs2_out <= 5'b0;
+            rd_out <= 5'b0;
+            funct3_out <= 3'b0;
+            funct7_out <= 7'b0;
+        end
+        else begin
+            RegWrite_out <= RegWrite_in;
+            ALUSrc_out <= ALUSrc_in;
+            MemRead_out <= MemRead_in;
+            MemWrite_out <= MemWrite_in;
+            MemtoReg_out <= MemtoReg_in;
+            Branch_out <= Branch_in;
+            ALUOp_out <= ALUOp_in;
+            pc_out <= pc_in;
+            read_data1_out <= read_data1_in;
+            read_data2_out <= read_data2_in;
+            imm_out <= imm_in;
+            rs1_out <= rs1_in;
+            rs2_out <= rs2_in;
+            rd_out <= rd_in;
+            funct3_out <= funct3_in;
+            funct7_out <= funct7_in;
+        end
+    end
+endmodule
+
+// EX/MEM Pipeline Register
+module EXMEM_Register(
+    input clk,
+    input rst,
+    input [31:0] ALU_Result,
+    input MemRead,
+    input MemWrite,
+    input Branch,
+    input MemToReg,
+    input RegWrite,
+    input Zero,
+    input [31:0] ADD_Sum,
+    input [31:0] read_data2_in,
+    input [4:0] rd_in,
+    output reg [31:0] ALU_Result_Out,
+    output reg MemRead_Out,
+    output reg MemWrite_Out,
+    output reg Branch_Out,
+    output reg MemToReg_Out,
+    output reg RegWrite_Out,
+    output reg Zero_Out,
+    output reg [31:0] ADD_Sum_Out,
+    output reg [31:0] read_data2_out,
+    output reg [4:0] rd_out
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            ALU_Result_Out <= 32'b0;
+            MemRead_Out <= 1'b0;
+            MemWrite_Out <= 1'b0;
+            Branch_Out <= 1'b0;
+            MemToReg_Out <= 1'b0;
+            RegWrite_Out <= 1'b0;
+            Zero_Out <= 1'b0;
+            ADD_Sum_Out <= 32'b0;
+            read_data2_out <= 32'b0;
+            rd_out <= 5'b0;
+        end
+        else begin
+            ALU_Result_Out <= ALU_Result;
+            MemRead_Out <= MemRead;
+            MemWrite_Out <= MemWrite;
+            Branch_Out <= Branch;
+            MemToReg_Out <= MemToReg;
+            RegWrite_Out <= RegWrite;
+            Zero_Out <= Zero;
+            ADD_Sum_Out <= ADD_Sum;
+            read_data2_out <= read_data2_in;
+            rd_out <= rd_in;
+        end
+    end
+endmodule
+
+// MEM/WB Pipeline Register
+module MEMWB_Register(
+    input clk,
+    input rst,
+    input RegWrite,
+    input MemToReg,
+    input [4:0] rd_in,
+    input [31:0] read_data_dm,
+    input [31:0] ALU_result,
+    output reg RegWrite_out,
+    output reg MemToReg_out,
+    output reg [4:0] rd_out,
+    output reg [31:0] read_data_dm_out,
+    output reg [31:0] ALU_result_out
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            RegWrite_out <= 1'b0;
+            MemToReg_out <= 1'b0;
+            rd_out <= 5'b0;
+            read_data_dm_out <= 32'b0;
+            ALU_result_out <= 32'b0;
+        end
+        else begin
+            RegWrite_out <= RegWrite;
+            MemToReg_out <= MemToReg;
+            rd_out <= rd_in;
+            read_data_dm_out <= read_data_dm;
+            ALU_result_out <= ALU_result;
+        end
+    end
+endmodule 
+
+// Forwarding Unit
+module forwarding_unit (
+    input [4:0] EX_MEM_RegisterRd,
+    input EX_MEM_RegWrite,
+    input [4:0] MEM_WB_RegisterRd,
+    input MEM_WB_RegWrite,
+    input [4:0] ID_EX_RegisterRs1,
+    input [4:0] ID_EX_RegisterRs2,
+    output reg [1:0] ForwardA,
+    output reg [1:0] ForwardB
+);
+    always @(*) begin
+        ForwardA = 2'b00;
+        ForwardB = 2'b00;
+
+        if (EX_MEM_RegWrite && (EX_MEM_RegisterRd != 5'b00000)) begin
+            if (EX_MEM_RegisterRd == ID_EX_RegisterRs1) begin
+                ForwardA = 2'b10;
+            end
+            if (EX_MEM_RegisterRd == ID_EX_RegisterRs2) begin
+                ForwardB = 2'b10;
+            end
+        end
+
+        if (MEM_WB_RegWrite && (MEM_WB_RegisterRd != 5'b00000)) begin
+            if ((MEM_WB_RegisterRd == ID_EX_RegisterRs1) &&
+                !(EX_MEM_RegWrite && (EX_MEM_RegisterRd != 5'b00000) &&
+                (EX_MEM_RegisterRd == ID_EX_RegisterRs1))) begin
+                ForwardA = 2'b01;
+            end
+            if ((MEM_WB_RegisterRd == ID_EX_RegisterRs2) &&
+                !(EX_MEM_RegWrite && (EX_MEM_RegisterRd != 5'b00000) &&
+                (EX_MEM_RegisterRd == ID_EX_RegisterRs2))) begin
+                ForwardB = 2'b01;
+            end
+        end
+    end
+endmodule
+
+// Hazard Detection Unit 
+module hazard_detection_unit (
+    input ID_EX_MemRead,
+    input [4:0] ID_EX_RegisterRt,
+    input [4:0] IF_ID_RegisterRs1,
+    input [4:0] IF_ID_RegisterRs2,
+    output reg PCWrite,
+    output reg IF_IDWrite,
+    output reg Mux
+);
+    always @(*) begin
+        PCWrite = 1'b1;
+        IF_IDWrite = 1'b1;
+        Mux = 1'b0;
+        if (ID_EX_MemRead &&
+            ((ID_EX_RegisterRt == IF_ID_RegisterRs1) ||
+            (ID_EX_RegisterRt == IF_ID_RegisterRs2)) &&
+            (ID_EX_RegisterRt != 5'b00000)) begin
+            PCWrite = 1'b0;
+            IF_IDWrite = 1'b0;
+            Mux = 1'b1;
+        end
+    end
+endmodule
+
+// Main processor - FIXED: Corrected branch target usage
+module RISCV_Pipelined_Top(
+    input clk, rst
+);
+    // Wires for connections
+    wire [31:0] pc_out_wire, pc_next_wire, pc_wire, instruction_wire;
+    wire [31:0] ifid_pc_out, ifid_instruction_out;
+    wire [31:0] read_data1_wire, read_data2_wire, write_data_wire;
+    wire [31:0] branch_target_wire, imm_gen_wire;
+    wire [31:0] alu_result_wire, data_mem_out_wire;
+    wire [31:0] alu_mux_out_wire, forward_mux_a_out, forward_mux_b_out;
+    
+    wire RegWrite_wire, ALUSrc_wire, MemRead_wire, MemWrite_wire;
+    wire MemtoReg_wire, Branch_wire, Zero_wire, branch_select;
+    wire [1:0] ALUOp_wire;
+    wire [3:0] ALUcontrol_wire;
+    
+    wire [31:0] idex_pc_out, idex_read_data1_out, idex_read_data2_out, idex_imm_out;
+    wire [4:0] idex_rs1_out, idex_rs2_out, idex_rd_out;
+    wire [2:0] idex_funct3_out;
+    wire [6:0] idex_funct7_out;
+    wire idex_RegWrite_out, idex_ALUSrc_out, idex_MemRead_out, idex_MemWrite_out;
+    wire idex_MemtoReg_out, idex_Branch_out;
+    wire [1:0] idex_ALUOp_out;
+    
+    wire [31:0] exmem_ALU_Result_Out, exmem_ADD_Sum_Out, exmem_read_data2_out;
+    wire [4:0] exmem_rd_out;
+    wire exmem_MemRead_Out, exmem_MemWrite_Out, exmem_Branch_Out;
+    wire exmem_MemToReg_Out, exmem_RegWrite_Out, exmem_Zero_Out;
+    
+    wire [31:0] memwb_read_data_dm_out, memwb_ALU_result_out;
+    wire [4:0] memwb_rd_out;
+    wire memwb_RegWrite_out, memwb_MemToReg_out;
+    
+    wire [1:0] ForwardA, ForwardB;
+    wire PCWrite, IF_IDWrite, HazardMux;
+    
+    wire final_RegWrite, final_ALUSrc, final_MemRead, final_MemWrite;
+    wire final_MemtoReg, final_Branch;
+    wire [1:0] final_ALUOp;
+
+    assign branch_select = exmem_Branch_Out & exmem_Zero_Out;
+
+    // Hazard detection
+    hazard_detection_unit HDU(
+        .ID_EX_MemRead(idex_MemRead_out),
+        .ID_EX_RegisterRt(idex_rd_out),
+        .IF_ID_RegisterRs1(ifid_instruction_out[19:15]),
+        .IF_ID_RegisterRs2(ifid_instruction_out[24:20]),
+        .PCWrite(PCWrite),
+        .IF_IDWrite(IF_IDWrite),
+        .Mux(HazardMux)
+    );
+
+    // Control signals after hazard
+    assign final_RegWrite = HazardMux ? 1'b0 : RegWrite_wire;
+    assign final_ALUSrc = HazardMux ? 1'b0 : ALUSrc_wire;
+    assign final_MemRead = HazardMux ? 1'b0 : MemRead_wire;
+    assign final_MemWrite = HazardMux ? 1'b0 : MemWrite_wire;
+    assign final_MemtoReg = HazardMux ? 1'b0 : MemtoReg_wire;
+    assign final_Branch = HazardMux ? 1'b0 : Branch_wire;
+    assign final_ALUOp = HazardMux ? 2'b00 : ALUOp_wire;
+
+    ProgramCounter PC(
+        .clk(clk),
+        .rst(rst),
+        .pc_write(PCWrite),
+        .nextAddr(pc_wire),
+        .currAddr(pc_out_wire)
+    );
+
+    pc_adder PC_Adder(
+        .pc_in(pc_out_wire),
+        .pc_next(pc_next_wire)
+    );
+
+    Branch_Adder BA(
+        .PC(idex_pc_out),
+        .offset(idex_imm_out),
+        .branch_target(branch_target_wire)
+    );
+
+    // FIXED: Use branch target from EX/MEM stage instead of current EX stage
+    pc_mux PC_Mux(
+        .pc_in(pc_next_wire),
+        .pc_branch(exmem_ADD_Sum_Out),
+        .pc_select(branch_select),
+        .pc_out(pc_wire)
+    );
+
+    instruction_memory Instr_Mem(
+        .pc(pc_out_wire),
+        .instruction(instruction_wire)
+    );
+
+    IFID_Register IFID(
+        .clk(clk),
+        .rst(rst),
+        .if_id_write(IF_IDWrite),
+        .pc_in(pc_out_wire),
+        .pc_out(ifid_pc_out),
+        .instruction_in(instruction_wire),
+        .instruction_out(ifid_instruction_out)
+    );
+
+    Control_Unit Control(
+        .opcode(ifid_instruction_out[6:0]),
+        .Branch(Branch_wire),
+        .MemRead(MemRead_wire),
+        .MemtoReg(MemtoReg_wire),
+        .ALUOp(ALUOp_wire),
+        .MemWrite(MemWrite_wire),
+        .ALUSrc(ALUSrc_wire),
+        .RegWrite(RegWrite_wire)
+    );
+
+    RegFile Register_File(
+        .clk(clk),
+        .reset(rst),
+        .reg_write(memwb_RegWrite_out),
+        .read_reg1(ifid_instruction_out[19:15]),
+        .read_reg2(ifid_instruction_out[24:20]),
+        .write_reg(memwb_rd_out),
+        .write_data(write_data_wire),
+        .read_data1(read_data1_wire),
+        .read_data2(read_data2_wire)
+    );
+
+    ImmGen Imm_Gen(
+        .Instr(ifid_instruction_out),
+        .Imm_Out(imm_gen_wire)
+    );
+
+    IDEX_Register IDEX(
+        .clk(clk),
+        .rst(rst),
+        .RegWrite_in(final_RegWrite),
+        .ALUSrc_in(final_ALUSrc),
+        .MemRead_in(final_MemRead),
+        .MemWrite_in(final_MemWrite),
+        .MemtoReg_in(final_MemtoReg),
+        .Branch_in(final_Branch),
+        .ALUOp_in(final_ALUOp),
+        .pc_in(ifid_pc_out),
+        .read_data1_in(read_data1_wire),
+        .read_data2_in(read_data2_wire),
+        .imm_in(imm_gen_wire),
+        .rs1_in(ifid_instruction_out[19:15]),
+        .rs2_in(ifid_instruction_out[24:20]),
+        .rd_in(ifid_instruction_out[11:7]),
+        .funct3_in(ifid_instruction_out[14:12]),
+        .funct7_in(ifid_instruction_out[31:25]),
+        .RegWrite_out(idex_RegWrite_out),
+        .ALUSrc_out(idex_ALUSrc_out),
+        .MemRead_out(idex_MemRead_out),
+        .MemWrite_out(idex_MemWrite_out),
+        .MemtoReg_out(idex_MemtoReg_out),
+        .Branch_out(idex_Branch_out),
+        .ALUOp_out(idex_ALUOp_out),
+        .pc_out(idex_pc_out),
+        .read_data1_out(idex_read_data1_out),
+        .read_data2_out(idex_read_data2_out),
+        .imm_out(idex_imm_out),
+        .rs1_out(idex_rs1_out),
+        .rs2_out(idex_rs2_out),
+        .rd_out(idex_rd_out),
+        .funct3_out(idex_funct3_out),
+        .funct7_out(idex_funct7_out)
+    );
+
+    forwarding_unit FU(
+        .EX_MEM_RegisterRd(exmem_rd_out),
+        .EX_MEM_RegWrite(exmem_RegWrite_Out),
+        .MEM_WB_RegisterRd(memwb_rd_out),
+        .MEM_WB_RegWrite(memwb_RegWrite_out),
+        .ID_EX_RegisterRs1(idex_rs1_out),
+        .ID_EX_RegisterRs2(idex_rs2_out),
+        .ForwardA(ForwardA),
+        .ForwardB(ForwardB)
+    );
+
+    MUX3to1 Forward_Mux_A(
+        .input0(idex_read_data1_out),
+        .input1(write_data_wire),
+        .input2(exmem_ALU_Result_Out),
+        .select(ForwardA),
+        .out(forward_mux_a_out)
+    );
+
+    MUX3to1 Forward_Mux_B(
+        .input0(idex_read_data2_out),
+        .input1(write_data_wire),
+        .input2(exmem_ALU_Result_Out),
+        .select(ForwardB),
+        .out(forward_mux_b_out)
+    );
+
+    MUX2to1 ALU_Src_Mux(
+        .input0(forward_mux_b_out),
+        .input1(idex_imm_out),
+        .select(idex_ALUSrc_out),
+        .out(alu_mux_out_wire)
+    );
+
+    ALU_Control ALU_Ctrl(
+        .ALUOp(idex_ALUOp_out),
+        .funct3(idex_funct3_out),
+        .funct7(idex_funct7_out),
+        .ALUcontrol_Out(ALUcontrol_wire)
+    );
+
+    ALU_32bit ALU(
+        .a(forward_mux_a_out),
+        .b(alu_mux_out_wire),
+        .alu_control(ALUcontrol_wire),
+        .result(alu_result_wire),
+        .zero(Zero_wire)
+    );
+
+    EXMEM_Register EXMEM(
+        .clk(clk),
+        .rst(rst),
+        .ALU_Result(alu_result_wire),
+        .MemRead(idex_MemRead_out),
+        .MemWrite(idex_MemWrite_out),
+        .Branch(idex_Branch_out),
+        .MemToReg(idex_MemtoReg_out),
+        .RegWrite(idex_RegWrite_out),
+        .Zero(Zero_wire),
+        .ADD_Sum(branch_target_wire),
+        .read_data2_in(forward_mux_b_out),
+        .rd_in(idex_rd_out),
+        .ALU_Result_Out(exmem_ALU_Result_Out),
+        .MemRead_Out(exmem_MemRead_Out),
+        .MemWrite_Out(exmem_MemWrite_Out),
+        .Branch_Out(exmem_Branch_Out),
+        .MemToReg_Out(exmem_MemToReg_Out),
+        .RegWrite_Out(exmem_RegWrite_Out),
+        .Zero_Out(exmem_Zero_Out),
+        .ADD_Sum_Out(exmem_ADD_Sum_Out),
+        .read_data2_out(exmem_read_data2_out),
+        .rd_out(exmem_rd_out)
+    );
+
+    Data_Memory Data_Mem(
+        .clk(clk),
+        .rst(rst),
+        .MemRead(exmem_MemRead_Out),
+        .MemWrite(exmem_MemWrite_Out),
+        .address(exmem_ALU_Result_Out),
+        .write_data(exmem_read_data2_out),
+        .read_data(data_mem_out_wire)
+    );
+
+    MEMWB_Register MEMWB(
+        .clk(clk),
+        .rst(rst),
+        .RegWrite(exmem_RegWrite_Out),
+        .MemToReg(exmem_MemToReg_Out),
+        .rd_in(exmem_rd_out),
+        .read_data_dm(data_mem_out_wire),
+        .ALU_result(exmem_ALU_Result_Out),
+        .RegWrite_out(memwb_RegWrite_out),
+        .MemToReg_out(memwb_MemToReg_out),
+        .rd_out(memwb_rd_out),
+        .read_data_dm_out(memwb_read_data_dm_out),
+        .ALU_result_out(memwb_ALU_result_out)
+    );
+
+    MUX2to1 WB_Mux(
+        .input0(memwb_ALU_result_out),
+        .input1(memwb_read_data_dm_out),
+        .select(memwb_MemToReg_out),
+        .out(write_data_wire)
+    );
+
+endmodule
+
+// ModelSim Compatible Testbench with Detailed Waveform Verification
+module RISCV_Pipelined_Tb;
+    reg clk, rst;
+    
+    RISCV_Pipelined_Top UUT (
+        .clk(clk), 
+        .rst(rst)
+    );
+    
+    // Clock generation - 10ns period
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk; 
+    end
+    
+    // Test sequence with detailed monitoring
+    initial begin
+        $display("=== RISC-V Pipelined Processor Test ===");
+        $display("Expected Results Based on Initial Register Values:");
+        $display("Initial: x2=8, x4=100, x6=64, x8=16, x10=45");
+        $display("Memory[1]=100, Memory[2]=200");
+        $display("");
+        
+        // Reset sequence
+        rst = 1;
+        #20;
+        rst = 0;
+        
+        $display("Clock | PC   | Instruction | RegWrite | WriteReg | WriteData | x2  | x4  | x6  | x8  | x10");
+        $display("------|------|-------------|----------|----------|-----------|-----|-----|-----|-----|----");
+        
+        // Monitor execution for sufficient cycles
+        repeat(25) begin
+            @(posedge clk);
+            $display("%5d | %04h | %08h    | %8b | %8d | %9d | %3d | %3d | %3d | %3d | %3d", 
+                     $time/10, UUT.pc_out_wire, UUT.instruction_wire, UUT.memwb_RegWrite_out,
+                     UUT.memwb_rd_out, UUT.write_data_wire,
+                     UUT.Register_File.registers[2], UUT.Register_File.registers[4],
+                     UUT.Register_File.registers[6], UUT.Register_File.registers[8],
+                     UUT.Register_File.registers[10]);
+        end
+        
+        $display("");
+        $display("=== FINAL VERIFICATION ===");
+        $display("Expected vs Actual Results:");
+        $display("Register 2:  Expected=10, Actual=%d %s", UUT.Register_File.registers[2], 
+                 (UUT.Register_File.registers[2] == 10) ? "?" : "?");
+        $display("Register 4:  Expected=102, Actual=%d %s", UUT.Register_File.registers[4], 
+                 (UUT.Register_File.registers[4] == 102) ? "?" : "?");
+        $display("Register 6:  Expected=202, Actual=%d %s", UUT.Register_File.registers[6], 
+                 (UUT.Register_File.registers[6] == 202) ? "?" : "?");
+        $display("Register 8:  Expected=100, Actual=%d %s", UUT.Register_File.registers[8], 
+                 (UUT.Register_File.registers[8] == 100) ? "?" : "?");
+        $display("Register 10: Expected=201, Actual=%d %s", UUT.Register_File.registers[10], 
+                 (UUT.Register_File.registers[10] == 201) ? "?" : "?");
+        
+        $display("Memory[2]:   Expected=100, Actual=%d %s", UUT.Data_Mem.D_Memory[2], 
+                 (UUT.Data_Mem.D_Memory[2] == 100) ? "?" : "?");
+        
+        // Test completion
+        if (UUT.Register_File.registers[2] == 10 && 
+            UUT.Register_File.registers[4] == 102 && 
+            UUT.Register_File.registers[6] == 202 && 
+            UUT.Register_File.registers[8] == 100 && 
+            UUT.Register_File.registers[10] == 201) begin
+            $display("");
+            $display("*** TEST PASSED - All calculations correct! ***");
+        end else begin
+            $display("");
+            $display("*** TEST FAILED - Check waveforms for debugging ***");
+        end
+        
+        $finish;
+    end
+    
+    // Pipeline stage monitoring for debugging
+    initial begin
+        $display("");
+        $display("=== PIPELINE STAGE MONITORING ===");
+        wait(!rst);
+        forever begin
+            @(posedge clk);
+            if (UUT.HazardMux) 
+                $display("CYCLE %0d: HAZARD STALL DETECTED", $time/10);
+            if (UUT.ForwardA != 2'b00)
+                $display("CYCLE %0d: FORWARDING A from source %b", $time/10, UUT.ForwardA);
+            if (UUT.ForwardB != 2'b00)
+                $display("CYCLE %0d: FORWARDING B from source %b", $time/10, UUT.ForwardB);
+        end
+    end
+    
+endmodule
