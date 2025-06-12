@@ -37,7 +37,7 @@ module pc_mux(
     end
 endmodule
 
-// Instruction Memory - FIXED: Corrected instruction encodings
+// Instruction Memory 
 module instruction_memory(
     input [31:0] pc,
     output [31:0] instruction
@@ -49,15 +49,14 @@ module instruction_memory(
         for (i = 0; i < 64; i = i + 1)
             imem[i] = 32'b0;
         
-        // FIXED: Correct instruction encodings
-        imem[0] = 32'h00110113; // addi x2, x2, 1
-        imem[1] = 32'h00120213; // addi x4, x4, 1  
-        imem[2] = 32'h00420333; // add x6, x4, x4
-        imem[3] = 32'h00112403; // lw x8, 1(x2)
-        imem[4] = 32'h00820533; // add x10, x4, x8
-        imem[5] = 32'h008120A3; // sw x8, 1(x2) - FIXED: Proper store encoding
-        imem[6] = 32'h00110113; // addi x2, x2, 1
-        imem[7] = 32'h00120213; // addi x4, x4, 1
+        imem[0] = 32'h00110113;
+        imem[1] = 32'h00120213; 
+        imem[2] = 32'h00420333; 
+        imem[3] = 32'h00112403; 
+        imem[4] = 32'h00820533;
+        imem[5] = 32'h008120A3; 
+        imem[6] = 32'h00110113; 
+        imem[7] = 32'h00120213; 
     end
     
     assign instruction = imem[pc[7:2]];
@@ -535,11 +534,9 @@ module hazard_detection_unit (
     end
 endmodule
 
-// Main processor - FIXED: Corrected branch target usage
 module RISCV_Pipelined_Top(
     input clk, rst
 );
-    // Wires for connections
     wire [31:0] pc_out_wire, pc_next_wire, pc_wire, instruction_wire;
     wire [31:0] ifid_pc_out, ifid_instruction_out;
     wire [31:0] read_data1_wire, read_data2_wire, write_data_wire;
@@ -617,7 +614,6 @@ module RISCV_Pipelined_Top(
         .branch_target(branch_target_wire)
     );
 
-    // FIXED: Use branch target from EX/MEM stage instead of current EX stage
     pc_mux PC_Mux(
         .pc_in(pc_next_wire),
         .pc_branch(exmem_ADD_Sum_Out),
@@ -813,7 +809,6 @@ module RISCV_Pipelined_Top(
 
 endmodule
 
-// ModelSim Compatible Testbench with Detailed Waveform Verification
 module RISCV_Pipelined_Tb;
     reg clk, rst;
     
@@ -822,13 +817,11 @@ module RISCV_Pipelined_Tb;
         .rst(rst)
     );
     
-    // Clock generation - 10ns period
     initial begin
         clk = 0;
         forever #5 clk = ~clk; 
     end
     
-    // Test sequence with detailed monitoring
     initial begin
         $display("=== RISC-V Pipelined Processor Test ===");
         $display("Expected Results Based on Initial Register Values:");
@@ -836,7 +829,6 @@ module RISCV_Pipelined_Tb;
         $display("Memory[1]=100, Memory[2]=200");
         $display("");
         
-        // Reset sequence
         rst = 1;
         #20;
         rst = 0;
@@ -844,7 +836,6 @@ module RISCV_Pipelined_Tb;
         $display("Clock | PC   | Instruction | RegWrite | WriteReg | WriteData | x2  | x4  | x6  | x8  | x10");
         $display("------|------|-------------|----------|----------|-----------|-----|-----|-----|-----|----");
         
-        // Monitor execution for sufficient cycles
         repeat(25) begin
             @(posedge clk);
             $display("%5d | %04h | %08h    | %8b | %8d | %9d | %3d | %3d | %3d | %3d | %3d", 
@@ -872,7 +863,6 @@ module RISCV_Pipelined_Tb;
         $display("Memory[2]:   Expected=100, Actual=%d %s", UUT.Data_Mem.D_Memory[2], 
                  (UUT.Data_Mem.D_Memory[2] == 100) ? "?" : "?");
         
-        // Test completion
         if (UUT.Register_File.registers[2] == 10 && 
             UUT.Register_File.registers[4] == 102 && 
             UUT.Register_File.registers[6] == 202 && 
@@ -888,7 +878,6 @@ module RISCV_Pipelined_Tb;
         $finish;
     end
     
-    // Pipeline stage monitoring for debugging
     initial begin
         $display("");
         $display("=== PIPELINE STAGE MONITORING ===");
